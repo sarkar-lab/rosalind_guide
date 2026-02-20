@@ -1,3 +1,9 @@
+---
+layout: page
+title: Rosalind HPC Server Guide
+permalink: /guide/
+---
+
 # Rosalind HPC Server — User Guide
 
 **Audience:** New lab members  

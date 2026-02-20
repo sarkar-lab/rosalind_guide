@@ -4,4 +4,6 @@ layout: home
 
 # Rosalind Guide
 
-A guide for solving [Rosalind](https://rosalind.info) bioinformatics problems.
+A guide for new lab members using the Rosalind HPC cluster.
+
+- [HPC Server User Guide](guide/)
