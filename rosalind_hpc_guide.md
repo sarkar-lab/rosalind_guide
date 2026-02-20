@@ -44,7 +44,7 @@ Rosalind is a shared high-performance computing (HPC) cluster. Understanding its
 
 Rosalind organizes nodes into *partitions* (queues). Common partitions include:
 
-- **cpu** — CPU-only nodes for general workloads
+- **cpu** — CPU-only nodes for general workloads (Mostly favored for typical bioinformatics and classical ML tasks)
 - **gpu** — GPU nodes; request only when your workload genuinely needs GPU acceleration
 - **interactive** (if available) — short interactive sessions for debugging
 
