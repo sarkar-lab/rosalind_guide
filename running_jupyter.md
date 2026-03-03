@@ -15,10 +15,8 @@ Please choose the appropriate partition based on your job size and runtime.
 |---------------|-------------|----------------|--------------|
 | `debug`       | 2 hours     | CPU nodes      | Quick testing, debugging |
 | `cpus`        | 12 hours    | CPU nodes      | Standard CPU workloads (default) |
-| `batch`       | 7 days      | CPU nodes      | Long-running CPU jobs |
 | `debug-gpu`   | 2 hours     | GPU nodes      | Short GPU testing |
 | `gpus`        | 12 hours    | GPU nodes      | Standard GPU workloads |
-| `batch-gpu`   | 7 days      | GPU nodes      | Long-running GPU jobs |
 
 ### CPU Nodes
 Each CPU node provides:
@@ -61,7 +59,8 @@ For GPU nodes:
 ```bash
 sbatch -p debug-gpu --gres=gpu:blackwell:1 --wrap="nvidia-smi -L; sleep 120"
 ```
-
+# ⚠️ Current CPU2 problem
+Our /home directory is currently on CPU2, which means if you run too many CPU jobs on CPU2, you may experience slow performance due to I/O bottlenecks. Please monitor your jobs and avoid overloading CPU2.
 
 # ⚠️ GPU Usage Policy (Important)
 
@@ -116,10 +115,10 @@ submit with `sbatch run_jupyter.sbatch /path/to/project`.
 Paste the following:
 
 ```bash
-#!/bin/bash
+#!/usr/bin/env bash
 #SBATCH --job-name=jupyter_cpu
-#SBATCH --partition=cpus          # Use 'debug' for short (2h) sessions
-#SBATCH --time=04:00:00           # Adjust as needed
+#SBATCH --partition=cpus
+#SBATCH --time=04:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
@@ -127,72 +126,62 @@ Paste the following:
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --mail-type=END,FAIL
 
-TARGET_DIR=$1
+set -euo pipefail
 
-port=$(shuf -i10000-20000 -n1)
-node=$(hostname -s)
-user=$(whoami)
+# -----------------------------
+# Usage: sbatch jupyter_cpu.sbatch /path/to/workdir
+# -----------------------------
+TARGET_DIR="${1:-$PWD}"
+
+mkdir -p logs
+
+# Pick a random high port (avoid common collisions)
+PORT="$(shuf -i 10000-20000 -n 1)"
+NODE="$(hostname -s)"
+USER="$(whoami)"
+
+# -----------------------------
+# Generate token ourselves so it ALWAYS appears in the SLURM log
+# -----------------------------
+export PYTHONUNBUFFERED=1
+
+TOKEN="$(python - <<'PY'
+import secrets
+print(secrets.token_hex(24))
+PY
+)"
 
 echo ""
 echo "============================================================"
-echo "To connect from your LOCAL machine, open a new terminal and run:"
+echo "Jupyter will run on compute node: ${NODE}"
+echo "Port: ${PORT}"
 echo ""
-echo "ssh -N -L ${port}:${node}:${port} ${user}@rosalind-login"
+echo "From your LOCAL machine, run (in a new terminal):"
+echo "  ssh -N -L ${PORT}:127.0.0.1:${PORT} -J ${USER}@rosalind-login ${USER}@${NODE}"
 echo ""
 echo "Then open your browser at:"
-echo "http://localhost:${port}"
+echo "  http://127.0.0.1:${PORT}/lab?token=${TOKEN}"
+echo "Token:"
+echo "  ${TOKEN}"
 echo "============================================================"
 echo ""
 
-export PATH="${HOME}/miniforge3/bin:$PATH"
-eval "$(${HOME}/miniforge3/bin/conda shell hook --shell bash)"
-conda activate spatial # Activate your conda/mamba environment here spatial is the name of the environment we created in the previous step
+CONDA="${HOME}/miniforge3/bin/conda"
+# Start Jupyter; keep port fixed; send logs to the SLURM output
 
-cd "$TARGET_DIR"
-echo -e "\n\nRunning jupyter ...\n\n"
-jupyter lab --no-browser --port=${port} --ip=0.0.0.0
+cd "${TARGET_DIR}"
+echo -e "\n\nRunning JupyterLab...\n\n"
+
+# Bind to localhost for safety on shared nodes; access via SSH tunnel above.
+"${CONDA}" run -n spatial \
+  jupyter lab --no-browser --port="${PORT}" --ip=127.0.0.1 \
+  --ServerApp.token="${TOKEN}" \
+  --ServerApp.password="" \
+  --ServerApp.port_retries=0 \
+  --ServerApp.log_level=INFO \
+  2>&1 | tee -a "logs/jupyter_${USER}_${PORT}.log"
 ```
-
-Similarly, if you want to use a GPU node, change the SBATCH headers to:
-
-```bash
-#!/bin/bash
-#SBATCH --job-name=jupyter_cpu
-#SBATCH --partition=cpus          # Use 'debug' for short (2h) sessions
-#SBATCH --time=04:00:00           # Adjust as needed
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=32G
-#SBATCH --output=logs/%x_%j.out
-#SBATCH --mail-type=END,FAIL
-
-TARGET_DIR=$1
-
-port=$(shuf -i10000-20000 -n1)
-node=$(hostname -s)
-user=$(whoami)
-
-echo ""
-echo "============================================================"
-echo "To connect from your LOCAL machine, open a new terminal and run:"
-echo ""
-echo "ssh -N -L ${port}:${node}:${port} ${user}@rosalind-login"
-echo ""
-echo "Then open your browser at:"
-echo "http://localhost:${port}"
-echo "============================================================"
-echo ""
-
-export PATH="${HOME}/miniforge3/bin:$PATH"
-eval "$(${HOME}/miniforge3/bin/conda shell hook --shell bash)"
-conda activate spatial # Activate your conda/mamba environment here spatial is the name of the environment we created in the previous step
-
-cd "$TARGET_DIR"
-echo -e "\n\nRunning jupyter ...\n\n"
-jupyter lab --no-browser --port=${port} --ip=0.0.0.0
-```
-
+Make sure to update the SBATCH headers according to your needs (partition, time, resources).
 Then submit the job:
 
 ```bash
@@ -217,7 +206,7 @@ http://localhost:<PORT>
 Follow the same steps but make sure to request a GPU in your SBATCH script as shown above. The Jupyter Lab session will run on the GPU node, and you can use it to run GPU-accelerated code.
 
 ```bash
-#!/bin/bash
+#!/usr/bin/env bash
 #SBATCH --job-name=jupyter_gpu
 #SBATCH --partition=debug-gpu        # debug-gpu (2h), gpus (12h), batch-gpu (7d)
 #SBATCH --gres=gpu:blackwell:1       # Request 1 Blackwell GPU
@@ -225,32 +214,68 @@ Follow the same steps but make sure to request a GPU in your SBATCH script as sh
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=64G
+#SBATCH --mem=32G
 #SBATCH --output=logs/%x_%j.out
-#SBATCH --mail-type=END,FAIL
 
-TARGET_DIR=$1
+set -euo pipefail
 
-port=$(shuf -i10000-20000 -n1)
-node=$(hostname -s)
-user=$(whoami)
+# -----------------------------
+# Usage: sbatch jupyter_cpu.sbatch /path/to/workdir
+# -----------------------------
+TARGET_DIR="${1:-$PWD}"
+
+mkdir -p logs
+
+
+# Pick a random high port (avoid common collisions)
+PORT="$(shuf -i 10000-20000 -n 1)"
+NODE="$(hostname -s)"
+USER="$(whoami)"
+
+# -----------------------------
+# Generate token ourselves so it ALWAYS appears in the SLURM log
+# -----------------------------
+export PYTHONUNBUFFERED=1
+
+TOKEN="$(python - <<'PY'
+import secrets
+print(secrets.token_hex(24))
+PY
+)"
 
 echo ""
 echo "============================================================"
-echo "From your LOCAL machine, run:"
+echo "Jupyter will run on compute node: ${NODE}"
+echo "Port: ${PORT}"
 echo ""
-echo "ssh -N -L ${port}:${node}:${port} ${user}@rosalind-login"
+echo "From your LOCAL machine, run (in a new terminal):"
+echo "  ssh -N -L ${PORT}:127.0.0.1:${PORT} -J ${USER}@rosalind-login ${USER}@${NODE}"
 echo ""
-echo "Then open:"
-echo "http://localhost:${port}"
+echo "Then open your browser at:"
+echo "  http://127.0.0.1:${PORT}/lab?token=${TOKEN}"
+echo "Token:"
+echo "  ${TOKEN}"
 echo "============================================================"
 echo ""
 
-export PATH="${HOME}/miniforge3/bin:$PATH"
-eval "$(${HOME}/miniforge3/bin/conda shell hook --shell bash)"
-conda activate spatial
+CONDA="${HOME}/miniforge3/bin/conda"
+# Start Jupyter; keep port fixed; send logs to the SLURM output
 
-cd "$TARGET_DIR"
+cd "${TARGET_DIR}"
+echo -e "\n\nRunning JupyterLab...\n\n"
 
-jupyter lab --no-browser --port=${port} --ip=0.0.0.0
+# Bind to localhost for safety on shared nodes; access via SSH tunnel above.
+"${CONDA}" run -n spatial \
+  jupyter lab --no-browser --port="${PORT}" --ip=127.0.0.1 \
+  --ServerApp.token="${TOKEN}" \
+  --ServerApp.password="" \
+  --ServerApp.port_retries=0 \
+  --ServerApp.log_level=INFO \
+  2>&1 | tee -a "logs/jupyter_${USER}_${PORT}.log"
+```
+
+Again submit with the following command and follow the same steps to connect.
+
+```bash
+sbatch run_jupyter.sbatch /path/to/your/project
 ```
