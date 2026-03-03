@@ -44,9 +44,13 @@ Rosalind is a shared high-performance computing (HPC) cluster. Understanding its
 
 Rosalind organizes nodes into *partitions* (queues). Common partitions include:
 
-- **cpu** — CPU-only nodes for general workloads (Mostly favored for typical bioinformatics and classical ML tasks)
-- **gpu** — GPU nodes; request only when your workload genuinely needs GPU acceleration
-- **interactive** (if available) — short interactive sessions for debugging
+
+| Partition      | Max Time     | Hardware        | Intended Use |
+|---------------|-------------|----------------|--------------|
+| `debug`       | 2 hours     | CPU nodes      | Quick testing, debugging |
+| `cpus`        | 12 hours    | CPU nodes      | Standard CPU workloads (default) |
+| `debug-gpu`   | 2 hours     | GPU nodes      | Short GPU testing |
+| `gpus`        | 12 hours    | GPU nodes      | Standard GPU workloads |
 
 Check currently available partitions with:
 
@@ -58,7 +62,7 @@ sinfo -s
 
 | Path | Description | Use for |
 |------|-------------|---------|
-| `/home/<username>` | Your personal home directory (limited quota) | Scripts, conda environments, small config files |
+| `/home/NAS/<username>/` | Your personal home directory (limited quota) | Scripts, conda environments, small config files |
 | `/data` (NAS) | Shared lab network-attached storage (larger quota) | Datasets, results, shared project files |
 
 ---
