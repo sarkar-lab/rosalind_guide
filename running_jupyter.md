@@ -38,7 +38,7 @@ Each GPU node provides:
 
 - 2 NVIDIA Blackwell GPUs  
 - 384 CPU cores
-- 700 GB CPU RAM
+- 770 GB CPU RAM
 - 200 GB GPU RAM  
 
 To request a GPU:
