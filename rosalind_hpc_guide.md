@@ -72,7 +72,7 @@ sinfo -s
 ### Logging In
 
 ```bash
-ssh <username>@rosalind.example.edu   # replace with actual hostname
+ssh <username>@rosalind-login   # replace with actual hostname
 ```
 
 Use SSH key authentication when possible to avoid repeated password prompts.
@@ -504,7 +504,7 @@ conda activate /path/to/envs/my_env
 ## Quick Reference Card
 
 ```
-Login:          ssh <user>@rosalind.example.edu
+Login:          ssh <user>@rosalind.login
 Interactive:    srun --partition=cpu --cpus-per-task=4 --mem=8G --time=00:30:00 --pty bash
 Submit job:     sbatch my_job.sh
 Check queue:    squeue -u $USER
