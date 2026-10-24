@@ -38,32 +38,55 @@ Rosalind is a shared high-performance computing (HPC) cluster. Understanding its
 | **CPU compute nodes** | General-purpose computation | Most bioinformatics, preprocessing, classical ML |
 | **GPU compute nodes** | Accelerated computation | Large deep learning training, heavy spatial-omics modeling, large-scale simulation |
 
-> **Important:** Never run compute-intensive work directly on the login node. All non-trivial work must go through SLURM.
+> **Important:** Never run compute-intensive work directly on the login node. All non-trivial work must go through SLURM. The login node is small (16 CPU threads) and shared by everyone.
+
+### Hardware
+
+| Node(s) | Count | CPUs | CPU RAM | GPUs |
+|---------|-------|------|---------|------|
+| `ROSALIND-CPU1`, `ROSALIND-CPU2` | 2 | 384 threads (2 × 96-core AMD EPYC 9645) | ~770 GB | none |
+| `ROSALIND-GPU1`, `ROSALIND-GPU2` | 2 | 384 threads (2 × 96-core AMD EPYC 9645) | ~1 TB | 2 × NVIDIA RTX PRO 6000 Blackwell Server Edition (~96 GB each) |
+
+That is 4 GPUs in total. Each compute node also has a local ~880 GB disk at `/tmp`.
 
 ### Partitions
 
-Rosalind organizes nodes into *partitions* (queues). Common partitions include:
+Rosalind organizes nodes into *partitions* (queues):
 
-
-| Partition      | Max Time     | Hardware        | Intended Use |
+| Partition      | Max Time     | Nodes           | Intended Use |
 |---------------|-------------|----------------|--------------|
-| `debug`       | 2 hours     | CPU nodes      | Quick testing, debugging |
-| `cpus`        | 12 hours    | CPU nodes      | Standard CPU workloads (default) |
-| `debug-gpu`   | 2 hours     | GPU nodes      | Short GPU testing |
+| `debug`       | 2 hours     | CPU nodes      | Quick testing, debugging (highest priority) |
+| `cpus`        | 12 hours    | CPU nodes      | Standard CPU workloads (**default**) |
+| `batch`       | 7 days      | CPU nodes      | Long CPU runs (lowest priority) |
+| `debug-gpu`   | 2 hours     | GPU nodes      | Short GPU testing (highest priority) |
 | `gpus`        | 12 hours    | GPU nodes      | Standard GPU workloads |
+| `batch-gpu`   | 7 days      | GPU nodes      | Long GPU runs (lowest priority) |
 
-Check currently available partitions with:
+Partition names are exactly as shown. There is no `cpu` or `gpu` partition: use `cpus` and `gpus`.
+
+Check partitions and node state with:
 
 ```bash
-sinfo -s
+sinfo -s          # partition summary
+sinfo -N -l       # one line per node, with state and drain reason
 ```
+
+**Per-user limits.** Slurm QOS limits apply: the `normal` QOS caps a user at 240 CPUs at once, and the `priority` QOS at 480. Check yours with `sacctmgr show assoc user=$USER format=Account,QOS`.
 
 ### Shared Storage
 
+Your login directory is `/home/NAShome/<username>/` (the `$HOME` variable points there). It sits on the shared network storage and is visible from the login node and all compute nodes. Other mounts:
+
 | Path | Description | Use for |
 |------|-------------|---------|
-| `/home/NAS/<username>/` | Your personal home directory (limited quota) | Scripts, conda environments, small config files |
-| `/data` (NAS) | Shared lab network-attached storage (larger quota) | Datasets, results, shared project files |
+| `/home/NAShome/<username>/` | Your home directory on the shared network storage (~97 TB pool shared by everyone) | Scripts, conda environments, small config files |
+| `/Polaris/<LabName>/` (one directory per lab) | Per-lab network storage, large | Datasets, results, project files for that lab |
+| `/mnt/launas/` | Lau lab NAS (network, large) | Lab archives and shared data |
+| `/mnt/htan/` | HTAN data share (SMB/CIFS mount) | HTAN datasets |
+| `/home/NAS/` | Older shared NAS (~7 TB) | Legacy data; ask before adding new data |
+| `/tmp` (on each compute node) | Fast local NVMe disk (~880 GB per node) | Temporary I/O during a job |
+
+> Check current free space at any time with `df -h /home/NAShome /Polaris/<LabName>`. These are network filesystems, so heavy small-file I/O from many jobs at once will be slow.
 
 ---
 
@@ -108,16 +131,18 @@ conda deactivate
 ## 3. Filesystem Conventions
 
 ```
-/home/<username>/          Personal home — scripts, envs, config (limited space)
-/data/                     Shared NAS — datasets, results, project files
-/data/<project>/           Per-project directories (coordinate with lab)
-/tmp/ (on compute node)    Fast local scratch — use for temporary I/O during jobs
+/home/NAShome/<username>/    Personal home — scripts, envs, config
+/Polaris/<LabName>/          Lab storage — datasets, results, project files
+/Polaris/<LabName>/<project>/  Per-project directories (coordinate with lab)
+/mnt/launas/, /mnt/htan/     Group data shares (see Section 1)
+/tmp/ (on compute node)      Fast local scratch — use for temporary I/O during jobs
 ```
 
 **Conventions:**
 
-- Keep large raw data in `/data`, not in `/home`.
-- Do not store large intermediate files in `/home`; you will hit quota limits and affect other users.
+- Keep large raw data in your lab's `/Polaris/<LabName>/` directory, not in your home.
+- Do not store large intermediate files in your home; the home pool is shared by everyone and filling it affects all users.
+- Everything under `/home`, `/Polaris` and `/mnt` is network storage. Jobs doing millions of small reads and writes should work in `/tmp` on the compute node and copy results back at the end.
 - Clean up `/tmp` scratch files after your job finishes.
 
 ---
@@ -132,7 +157,7 @@ Use `srun` when you need an interactive shell on a compute node — for example,
 
 ```bash
 # Short interactive CPU session (30 min, 4 CPUs, 8 GB RAM)
-srun --partition=cpu --cpus-per-task=4 --mem=8G --time=00:30:00 --pty bash
+srun --partition=cpus --cpus-per-task=4 --mem=8G --time=00:30:00 --pty bash
 ```
 
 ### Batch Job (`sbatch`)
@@ -144,7 +169,7 @@ For production runs, write a job script and submit it with `sbatch`.
 ```bash
 #!/bin/bash
 #SBATCH --job-name=my_analysis
-#SBATCH --partition=cpu
+#SBATCH --partition=cpus
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
@@ -155,8 +180,10 @@ For production runs, write a job script and submit it with `sbatch`.
 conda activate my_env
 
 # Run your analysis
-python run_pipeline.py --input /data/project/input --output /data/project/output
+python run_pipeline.py --input /Polaris/<LabName>/project/input --output /Polaris/<LabName>/project/output
 ```
+
+> The `logs/` directory must exist **before** you submit (`mkdir -p logs`). Slurm will not create it, and a job that cannot open its log file fails.
 
 Submit the script:
 
@@ -168,11 +195,12 @@ sbatch run_analysis.sh
 
 | Directive | Meaning | Example |
 |-----------|---------|---------|
-| `--partition` | Which partition/queue to use | `--partition=cpu` |
-| `--cpus-per-task` | Number of CPU cores | `--cpus-per-task=8` |
-| `--mem` | Total memory for the job | `--mem=32G` |
+| `--partition` | Which partition/queue to use | `--partition=cpus` |
+| `--cpus-per-task` | Number of CPU threads | `--cpus-per-task=8` |
+| `--mem` | Total memory for the job (**always set this**, see Section 5) | `--mem=32G` |
 | `--time` | Maximum wall-clock time (HH:MM:SS) | `--time=04:00:00` |
-| `--gres=gpu:N` | Number of GPUs (GPU partition only) | `--gres=gpu:1` |
+| `--gres=gpu:blackwell:N` | N whole GPUs, exclusive to your job (GPU partitions only) | `--gres=gpu:blackwell:1` |
+| `--gres=shard:N` | N *shares* of a GPU, shared with other jobs (GPU partitions only, see Section 6) | `--gres=shard:2` |
 | `--output` / `--error` | Log file paths | `--output=logs/%j.out` |
 | `--job-name` | Label your job | `--job-name=preprocess` |
 
@@ -184,7 +212,7 @@ sbatch run_analysis.sh
 
 ### Why Over-Requesting Hurts Everyone
 
-SLURM allocates resources exclusively. If you request 64 CPUs and only use 4, those 60 CPUs sit idle and **nobody else can use them**. This:
+Nodes are shared: SLURM gives each job the CPU threads, memory and GPUs it asked for, and other jobs can use the rest of the node. But whatever you request is reserved for you. If you request 64 CPUs and only use 4, those 60 CPUs sit idle and **nobody else can use them**. This:
 
 - Increases wait time for all lab members
 - Wastes expensive shared hardware
@@ -207,10 +235,10 @@ SLURM allocates resources exclusively. If you request 64 CPUs and only use 4, th
 #SBATCH --cpus-per-task=64    # script uses 4 threads
 #SBATCH --mem=500G            # actual usage is ~20 GB
 #SBATCH --time=7-00:00:00     # job finishes in 2 hours
-#SBATCH --gres=gpu:4          # only one GPU is used
+#SBATCH --gres=gpu:blackwell:2  # both GPUs of a node, but only one is used
 ```
 
-This blocks 64 CPUs, 500 GB RAM, and 4 GPUs for a week — for everyone else on the cluster.
+This blocks 64 CPUs, 500 GB RAM, and both GPUs of a node for a week — for everyone else on the cluster.
 
 #### ✅ Good: Right-sized request
 
@@ -219,6 +247,10 @@ This blocks 64 CPUs, 500 GB RAM, and 4 GPUs for a week — for everyone else on 
 #SBATCH --mem=25G             # peak usage ~20 GB + small buffer
 #SBATCH --time=03:00:00       # prior test run took ~2 hours
 ```
+
+### Always Set `--mem`
+
+If you do not set `--mem` (or `--mem-per-cpu`), your job is given a default of about 2.7 GB per CPU thread you requested. That default is a safe fallback, not a good estimate of what your job needs: a job that needs more will be killed with an out-of-memory error. Set `--mem` explicitly in every script.
 
 ### Memory Guidelines
 
@@ -267,30 +299,76 @@ If you are exploring, prototyping, or teaching and need a GPU for interactive it
 
 These platforms are better suited for experimentation and free up Rosalind's GPUs for production-scale jobs that truly need them.
 
+### Whole GPU or a Share of a GPU?
+
+Rosalind has **4 GPUs** (2 per GPU node), each with about 96 GB of GPU memory. There are two ways to request GPU time:
+
+| You ask for | Meaning | Use it for |
+|-------------|---------|------------|
+| `--gres=gpu:blackwell:1` | One **whole** GPU, exclusively yours | Large training runs that need the full card's memory or speed |
+| `--gres=shard:N` | `N` quarter-GPU *shares*, **shared** with other jobs | Notebooks, development, inference, small to medium training |
+
+**How shards work.** Each GPU is split into 4 shards, so a node has 8 shards. One shard is roughly a quarter of a GPU, about **24 GB** of GPU memory. Up to 4 single-shard jobs can run on the same GPU at once, and up to 16 across the cluster.
+
+| Request | About how much GPU memory |
+|---------|---------------------------|
+| `--gres=shard:1` | ~24 GB |
+| `--gres=shard:2` | ~48 GB |
+| `--gres=shard:3` | ~72 GB |
+| `--gres=shard:4` | a full GPU's worth (but it is still shared; use `gpu:blackwell:1` if you need exclusive use) |
+
+A job with shards sees exactly one GPU, as device `0` (`CUDA_VISIBLE_DEVICES=0`). Your job runs on one physical GPU, and its other shards are used by other people's jobs.
+
+**What shards do *not* do.** A shard is a scheduling quota, not a hardware limit:
+
+- **GPU memory is not enforced.** If your job allocates more than its share, the other jobs on that card can run out of memory and crash with a CUDA out-of-memory error, or you can. Keep your usage under about 24 GB per shard you requested, and request more shards if you need more memory.
+- **Compute is shared.** If other jobs are busy on the same GPU, yours will run slower than on a whole GPU.
+- A whole-GPU request (`gpu:blackwell:1`) can only start on a GPU that has no shard jobs on it, so it may wait while shard jobs are running.
+
+```bash
+#SBATCH --partition=gpus
+#SBATCH --gres=shard:2          # about half of a GPU (~48 GB)
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+```
+
+> Setting `CUDA_VISIBLE_DEVICES` yourself is not needed and can make your job use the wrong GPU. Leave it as Slurm sets it.
+
 ### GPU Request Examples
 
 #### ❌ Bad: Requesting a GPU for work that doesn't need it
 
 ```bash
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
+#SBATCH --partition=gpus
+#SBATCH --gres=gpu:blackwell:1
 #SBATCH --mem=64G
 
 # Running this on a GPU that completes in 3 minutes on CPU:
 python preprocess_counts.py --input raw.h5ad --output processed.h5ad
 ```
 
-#### ❌ Bad: Requesting multiple GPUs for a single-GPU workload
+#### ❌ Bad: Requesting both GPUs of a node for a single-GPU workload
 
 ```bash
-#SBATCH --gres=gpu:4    # your training script only uses one GPU
+#SBATCH --gres=gpu:blackwell:2    # your training script only uses one GPU
 ```
 
-#### ✅ Good: Justified GPU request for a large training run
+#### ✅ Good: A share of a GPU for a notebook or small model
 
 ```bash
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
+#SBATCH --partition=gpus
+#SBATCH --gres=shard:1            # ~24 GB of GPU memory, shared
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+```
+
+#### ✅ Good: Justified whole-GPU request for a large training run
+
+```bash
+#SBATCH --partition=gpus
+#SBATCH --gres=gpu:blackwell:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=12:00:00
@@ -298,7 +376,7 @@ python preprocess_counts.py --input raw.h5ad --output processed.h5ad
 conda activate deep_learning_env
 python train_model.py \
     --model large_transformer \
-    --data /data/project/train_set \
+    --data /Polaris/<LabName>/project/train_set \
     --epochs 100 \
     --batch_size 256
 ```
@@ -325,9 +403,9 @@ Before submitting a large production job, always validate with a small test:
 1. **Subset your input:** Take a small slice of your data (e.g., first 1,000 rows, one chromosome, one sample).
 2. **Run interactively on CPU first:**
    ```bash
-   srun --partition=cpu --cpus-per-task=4 --mem=16G --time=00:30:00 --pty bash
+   srun --partition=cpus --cpus-per-task=4 --mem=16G --time=00:30:00 --pty bash
    conda activate my_env
-   python my_pipeline.py --input /data/project/tiny_test --output /tmp/test_out
+   python my_pipeline.py --input /Polaris/<LabName>/project/tiny_test --output /tmp/test_out
    ```
 3. **Profile resource usage** using `htop` (in another terminal) or `/usr/bin/time -v`.
 4. **Estimate wall time** by extrapolating from your test run.
@@ -343,15 +421,15 @@ This practice catches bugs early, prevents wasted queue time, and gives you accu
 
 | Storage | Best for | Notes |
 |---------|----------|-------|
-| `/home/<username>` | Scripts, conda envs, config | Strictly limited quota — do not store data here |
-| `/data` (NAS) | Raw data, results, shared files | Large quota; treat as long-term lab storage |
+| `/home/NAShome/<username>` | Scripts, conda envs, config | Shared pool for all users — do not store large data here |
+| `/Polaris/<LabName>` | Raw data, results, shared files | Large lab storage; treat as long-term lab storage |
 | `/tmp` on compute node | Temporary I/O during a job | Fast local disk; **clean up after your job** |
 
 ### Avoid Unnecessary Duplication
 
-- **Do not copy large raw datasets** into your personal directories; symlink to `/data` instead:
+- **Do not copy large raw datasets** into your personal directories; symlink to the lab directory instead:
   ```bash
-  ln -s /data/shared/genomes/hg38 ~/refs/hg38
+  ln -s /Polaris/<LabName>/shared/genomes/hg38 ~/refs/hg38
   ```
 - Coordinate with labmates to share reference files (genome indices, model weights) rather than each person downloading their own copy.
 - When a project is complete or paused, archive or compress large intermediate files.
@@ -378,10 +456,10 @@ rm -rf $TMPDIR
 du -sh ~/
 
 # Check a project directory
-du -sh /data/project/
+du -sh /Polaris/<LabName>/project/
 
-# Check overall NAS usage (if available)
-df -h /data
+# Check free space on the shared storage
+df -h /home/NAShome /Polaris/<LabName>
 ```
 
 ---
@@ -395,7 +473,7 @@ df -h /data
 squeue -u $USER
 
 # See all jobs in a partition
-squeue -p cpu
+squeue -p cpus
 
 # Compact summary of all jobs
 squeue -a
@@ -473,13 +551,22 @@ Common fixes:
 
 ### CUDA / GPU Not Found
 
-- Confirm you are on the GPU partition: `squeue -u $USER` — check `PARTITION` column.
-- Make sure `--gres=gpu:N` is in your job script.
+- Confirm you are on a GPU partition (`debug-gpu`, `gpus` or `batch-gpu`): `squeue -u $USER` — check the `PARTITION` column.
+- Make sure your script requests a GPU: `--gres=gpu:blackwell:1` (whole GPU) or `--gres=shard:N` (a share of one).
 - Check CUDA availability inside your job:
   ```python
   import torch
   print(torch.cuda.is_available())   # Should be True
   ```
+- The GPUs are NVIDIA Blackwell cards. Use a PyTorch / TensorFlow / JAX build made for **CUDA 12.8 or newer**; older builds will not run kernels on these GPUs. The system `nvcc` is CUDA 12.0 and cannot compile for Blackwell, so install the CUDA toolkit in your conda environment if you need to compile CUDA code.
+
+### GPU Out-of-Memory on a Shared GPU
+
+If you use `--gres=shard:N` and see `CUDA out of memory` even though your own job is small, another job on the same GPU may be using more than its share. Check with `nvidia-smi` inside your job. If it keeps happening, request more shards or use a whole GPU (`--gres=gpu:blackwell:1`).
+
+### "Invalid generic resource (gres) specification"
+
+`sbatch` rejected your `--gres` value. Use exactly `--gres=gpu:blackwell:N` or `--gres=shard:N`, and submit from the login node.
 
 ### Conda Environment Not Found
 
@@ -504,14 +591,17 @@ conda activate /path/to/envs/my_env
 ## Quick Reference Card
 
 ```
-Login:          ssh <user>@rosalind.login
-Interactive:    srun --partition=cpu --cpus-per-task=4 --mem=8G --time=00:30:00 --pty bash
+Login:          ssh <user>@rosalind-login
+Interactive:    srun --partition=cpus --cpus-per-task=4 --mem=8G --time=00:30:00 --pty bash
 Submit job:     sbatch my_job.sh
+Partitions:     debug, cpus (default), batch  |  debug-gpu, gpus, batch-gpu
+Whole GPU:      #SBATCH --gres=gpu:blackwell:1
+Share of GPU:   #SBATCH --gres=shard:1   (~24 GB; shard:2 ~48 GB; shared)
 Check queue:    squeue -u $USER
 Cancel job:     scancel <JOBID>
 Job stats:      sacct -j <JOBID> --format=JobID,MaxRSS,Elapsed,ExitCode
 Node info:      sinfo -s
-Disk usage:     du -sh /data/myproject/
+Disk usage:     du -sh /Polaris/<LabName>/myproject/
 ```
 
 ---

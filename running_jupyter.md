@@ -15,8 +15,10 @@ Please choose the appropriate partition based on your job size and runtime.
 |---------------|-------------|----------------|--------------|
 | `debug`       | 2 hours     | CPU nodes      | Quick testing, debugging |
 | `cpus`        | 12 hours    | CPU nodes      | Standard CPU workloads (default) |
+| `batch`       | 7 days      | CPU nodes      | Long CPU runs (lowest priority) |
 | `debug-gpu`   | 2 hours     | GPU nodes      | Short GPU testing |
 | `gpus`        | 12 hours    | GPU nodes      | Standard GPU workloads |
+| `batch-gpu`   | 7 days      | GPU nodes      | Long GPU runs (lowest priority) |
 
 ### CPU Nodes
 Each CPU node provides:
@@ -36,17 +38,25 @@ Please avoid requesting excessive cores or memory unless your workload requires 
 
 Each GPU node provides:
 
-- 2 NVIDIA Blackwell GPUs  
+- 2 NVIDIA RTX PRO 6000 Blackwell GPUs (~96 GB GPU memory each)
 - 384 CPU cores
-- 770 GB CPU RAM
-- 200 GB GPU RAM  
+- ~1 TB CPU RAM
 
-To request a GPU:
+To request a **whole GPU** (exclusive to your job):
 
 ```
 #SBATCH --partition=debug-gpu
 #SBATCH --gres=gpu:blackwell:1
 ```
+
+To request a **share of a GPU** (shared with other jobs; a good fit for notebooks):
+
+```
+#SBATCH --partition=gpus
+#SBATCH --gres=shard:2        # shard:1 ~ 24 GB, shard:2 ~ 48 GB of GPU memory
+```
+
+A shard is a quarter of a GPU. GPU memory is not enforced per shard, so keep your usage within the share you asked for. See the [HPC Server User Guide](../guide/) for details.
 --
 
 ### Quick checks 
@@ -210,7 +220,7 @@ Follow the same steps but make sure to request a GPU in your SBATCH script as sh
 #!/usr/bin/env bash
 #SBATCH --job-name=jupyter_gpu
 #SBATCH --partition=debug-gpu        # debug-gpu (2h), gpus (12h), batch-gpu (7d)
-#SBATCH --gres=gpu:blackwell:1       # Request 1 Blackwell GPU
+#SBATCH --gres=gpu:blackwell:1       # 1 whole Blackwell GPU. For a shared GPU use: --gres=shard:2
 #SBATCH --time=02:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
