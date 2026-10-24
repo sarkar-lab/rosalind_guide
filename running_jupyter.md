@@ -18,7 +18,6 @@ Please choose the appropriate partition based on your job size and runtime.
 | `batch`       | 7 days      | CPU nodes      | Long CPU runs (lowest priority) |
 | `debug-gpu`   | 2 hours     | GPU nodes      | Short GPU testing |
 | `gpus`        | 12 hours    | GPU nodes      | Standard GPU workloads |
-| `batch-gpu`   | 7 days      | GPU nodes      | Long GPU runs (lowest priority) |
 
 ### CPU Nodes
 Each CPU node provides:
@@ -219,7 +218,7 @@ Follow the same steps but make sure to request a GPU in your SBATCH script as sh
 ```bash
 #!/usr/bin/env bash
 #SBATCH --job-name=jupyter_gpu
-#SBATCH --partition=debug-gpu        # debug-gpu (2h), gpus (12h), batch-gpu (7d)
+#SBATCH --partition=debug-gpu        # debug-gpu (2h), gpus (12h)
 #SBATCH --gres=gpu:blackwell:1       # 1 whole Blackwell GPU. For a shared GPU use: --gres=shard:2
 #SBATCH --time=02:00:00
 #SBATCH --nodes=1

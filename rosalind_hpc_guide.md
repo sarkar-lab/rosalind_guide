@@ -60,7 +60,6 @@ Rosalind organizes nodes into *partitions* (queues):
 | `batch`       | 7 days      | CPU nodes      | Long CPU runs (lowest priority) |
 | `debug-gpu`   | 2 hours     | GPU nodes      | Short GPU testing (highest priority) |
 | `gpus`        | 12 hours    | GPU nodes      | Standard GPU workloads |
-| `batch-gpu`   | 7 days      | GPU nodes      | Long GPU runs (lowest priority) |
 
 Partition names are exactly as shown. There is no `cpu` or `gpu` partition: use `cpus` and `gpus`.
 
@@ -551,7 +550,7 @@ Common fixes:
 
 ### CUDA / GPU Not Found
 
-- Confirm you are on a GPU partition (`debug-gpu`, `gpus` or `batch-gpu`): `squeue -u $USER` — check the `PARTITION` column.
+- Confirm you are on a GPU partition (`debug-gpu` or `gpus`): `squeue -u $USER` — check the `PARTITION` column.
 - Make sure your script requests a GPU: `--gres=gpu:blackwell:1` (whole GPU) or `--gres=shard:N` (a share of one).
 - Check CUDA availability inside your job:
   ```python
@@ -594,7 +593,7 @@ conda activate /path/to/envs/my_env
 Login:          ssh <user>@rosalind-login
 Interactive:    srun --partition=cpus --cpus-per-task=4 --mem=8G --time=00:30:00 --pty bash
 Submit job:     sbatch my_job.sh
-Partitions:     debug, cpus (default), batch  |  debug-gpu, gpus, batch-gpu
+Partitions:     debug, cpus (default), batch  |  debug-gpu, gpus
 Whole GPU:      #SBATCH --gres=gpu:blackwell:1
 Share of GPU:   #SBATCH --gres=shard:1   (~24 GB; shard:2 ~48 GB; shared)
 Check queue:    squeue -u $USER
