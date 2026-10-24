@@ -16,10 +16,11 @@ permalink: /guide/
 4. [SLURM Basics](#4-slurm-basics)
 5. [Requesting Resources Responsibly](#5-requesting-resources-responsibly)
 6. [GPU Usage Policy](#6-gpu-usage-policy)
-7. [Testing Jobs Before Scaling](#7-testing-jobs-before-scaling)
-8. [Storage Best Practices](#8-storage-best-practices)
-9. [Monitoring and Managing Jobs](#9-monitoring-and-managing-jobs)
-10. [Troubleshooting](#10-troubleshooting)
+7. [Whole GPU or a Share of a GPU?](#7-whole-gpu-or-a-share-of-a-gpu)
+8. [Testing Jobs Before Scaling](#8-testing-jobs-before-scaling)
+9. [Storage Best Practices](#9-storage-best-practices)
+10. [Monitoring and Managing Jobs](#10-monitoring-and-managing-jobs)
+11. [Troubleshooting](#11-troubleshooting)
 
 ---
 
@@ -196,7 +197,7 @@ sbatch run_analysis.sh
 | `--mem` | Total memory for the job (**always set this**, see Section 5) | `--mem=32G` |
 | `--time` | Maximum wall-clock time (HH:MM:SS) | `--time=04:00:00` |
 | `--gres=gpu:blackwell:N` | N whole GPUs, exclusive to your job (GPU partitions only) | `--gres=gpu:blackwell:1` |
-| `--gres=shard:N` | N *shares* of a GPU, shared with other jobs (GPU partitions only, see Section 6) | `--gres=shard:2` |
+| `--gres=shard:N` | N *shares* of a GPU, shared with other jobs (GPU partitions only, see [Section 7](#7-whole-gpu-or-a-share-of-a-gpu)) | `--gres=shard:2` |
 | `--output` / `--error` | Log file paths | `--output=logs/%j.out` |
 | `--job-name` | Label your job | `--job-name=preprocess` |
 
@@ -216,7 +217,7 @@ Nodes are shared: SLURM gives each job the CPU threads, memory and GPUs it asked
 
 ### How to Estimate What You Need
 
-1. **Run a small test first** (see [Section 7](#7-testing-jobs-before-scaling)).
+1. **Run a small test first** (see [Section 8](#8-testing-jobs-before-scaling)).
 2. Check peak memory usage with `sacct` or `/usr/bin/time -v`:
    ```bash
    /usr/bin/time -v python myscript.py 2>&1 | grep "Maximum resident"
@@ -295,7 +296,22 @@ If you are exploring, prototyping, or teaching and need a GPU for interactive it
 
 These platforms are better suited for experimentation and free up Rosalind's GPUs for production-scale jobs that truly need them.
 
-### Whole GPU or a Share of a GPU?
+### Before Requesting a GPU, Ask Yourself
+
+1. Does my code explicitly use CUDA / GPU acceleration?
+2. Have I profiled or tested on CPU — is the GPU truly necessary for this run?
+3. Am I running a final/production job, or am I still debugging?
+4. Could I run this on Google Colab or another external resource instead?
+
+If the answer to (1) or (2) is no, or if you are still in the debugging stage, **use a CPU node**.
+
+### Collaborative Responsibility
+
+Our GPUs are expensive and finite. When you hold a GPU node idle or run a trivial job on it, colleagues with legitimate GPU-intensive workloads may be blocked for hours. We rely on everyone's good judgment to keep the cluster usable for the whole lab.
+
+---
+
+## 7. Whole GPU or a Share of a GPU?
 
 Rosalind has **4 GPUs** (2 per GPU node), each with about 96 GB of GPU memory. There are two ways to request GPU time:
 
@@ -377,22 +393,9 @@ python train_model.py \
     --batch_size 256
 ```
 
-### Before Requesting a GPU, Ask Yourself
-
-1. Does my code explicitly use CUDA / GPU acceleration?
-2. Have I profiled or tested on CPU — is the GPU truly necessary for this run?
-3. Am I running a final/production job, or am I still debugging?
-4. Could I run this on Google Colab or another external resource instead?
-
-If the answer to (1) or (2) is no, or if you are still in the debugging stage, **use a CPU node**.
-
-### Collaborative Responsibility
-
-Our GPUs are expensive and finite. When you hold a GPU node idle or run a trivial job on it, colleagues with legitimate GPU-intensive workloads may be blocked for hours. We rely on everyone's good judgment to keep the cluster usable for the whole lab.
-
 ---
 
-## 7. Testing Jobs Before Scaling
+## 8. Testing Jobs Before Scaling
 
 Before submitting a large production job, always validate with a small test:
 
@@ -411,7 +414,7 @@ This practice catches bugs early, prevents wasted queue time, and gives you accu
 
 ---
 
-## 8. Storage Best Practices
+## 9. Storage Best Practices
 
 ### Use the Right Storage Tier
 
@@ -460,7 +463,7 @@ df -h /home/NAShome /Polaris/<LabName>
 
 ---
 
-## 9. Monitoring and Managing Jobs
+## 10. Monitoring and Managing Jobs
 
 ### Checking the Queue
 
@@ -516,7 +519,7 @@ squeue -u $USER --start
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 ### Job Fails Immediately
 

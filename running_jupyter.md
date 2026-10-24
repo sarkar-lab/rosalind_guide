@@ -41,21 +41,8 @@ Each GPU node provides:
 - 384 CPU cores
 - ~1 TB CPU RAM
 
-To request a **whole GPU** (exclusive to your job):
+To request a GPU, choose either a **whole GPU** (`--gres=gpu:blackwell:1`) or a **share of a GPU** (`--gres=shard:N`, a good fit for notebooks). See [Whole GPU or a Share of a GPU?](#whole-gpu-or-a-share-of-a-gpu) below.
 
-```
-#SBATCH --partition=debug-gpu
-#SBATCH --gres=gpu:blackwell:1
-```
-
-To request a **share of a GPU** (shared with other jobs; a good fit for notebooks):
-
-```
-#SBATCH --partition=gpus
-#SBATCH --gres=shard:2        # shard:1 ~ 24 GB, shard:2 ~ 48 GB of GPU memory
-```
-
-A shard is a quarter of a GPU. GPU memory is not enforced per shard, so keep your usage within the share you asked for. See the [HPC Server User Guide](../guide/) for details.
 --
 
 ### Quick checks 
@@ -69,6 +56,45 @@ For GPU nodes:
 ```bash
 sbatch -p debug-gpu --gres=gpu:blackwell:1 --wrap="nvidia-smi -L; sleep 120"
 ```
+
+## Whole GPU or a Share of a GPU?
+
+Rosalind has **4 GPUs** (2 per GPU node), each with about 96 GB of GPU memory. There are two ways to request GPU time:
+
+| You ask for | Meaning | Use it for |
+|-------------|---------|------------|
+| `--gres=gpu:blackwell:1` | One **whole** GPU, exclusively yours | Large training runs that need the full card's memory or speed |
+| `--gres=shard:N` | `N` quarter-GPU *shares*, **shared** with other jobs | Notebooks, development, inference, small to medium training |
+
+**How shards work.** Each GPU is split into 4 shards, so a node has 8 shards. One shard is roughly a quarter of a GPU, about **24 GB** of GPU memory. Up to 4 single-shard jobs can run on the same GPU at once, and up to 16 across the cluster.
+
+| Request | About how much GPU memory |
+|---------|---------------------------|
+| `--gres=shard:1` | ~24 GB |
+| `--gres=shard:2` | ~48 GB |
+| `--gres=shard:3` | ~72 GB |
+| `--gres=shard:4` | a full GPU's worth (but it is still shared; use `gpu:blackwell:1` if you need exclusive use) |
+
+A job with shards sees exactly one GPU, as device `0` (`CUDA_VISIBLE_DEVICES=0`). Your job runs on one physical GPU, and its other shards are used by other people's jobs.
+
+**What shards do *not* do.** A shard is a scheduling quota, not a hardware limit:
+
+- **GPU memory is not enforced.** If your job allocates more than its share, the other jobs on that card can run out of memory and crash with a CUDA out-of-memory error, or you can. Keep your usage under about 24 GB per shard you requested, and request more shards if you need more memory.
+- **Compute is shared.** If other jobs are busy on the same GPU, yours will run slower than on a whole GPU.
+- A whole-GPU request (`gpu:blackwell:1`) can only start on a GPU that has no shard jobs on it, so it may wait while shard jobs are running.
+
+```bash
+#SBATCH --partition=gpus
+#SBATCH --gres=shard:2          # about half of a GPU (~48 GB)
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+```
+
+> Setting `CUDA_VISIBLE_DEVICES` yourself is not needed and can make your job use the wrong GPU. Leave it as Slurm sets it.
+
+For GPU usage policy and more examples, see the [HPC Server User Guide](../guide/#7-whole-gpu-or-a-share-of-a-gpu).
+
 # ⚠️ Current CPU2 problem
 Our /home directory is currently on CPU2, which means if you run too many CPU jobs on CPU2, you may experience slow performance due to I/O bottlenecks. Please monitor your jobs and avoid overloading CPU2.
 
