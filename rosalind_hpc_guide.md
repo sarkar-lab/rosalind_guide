@@ -6,9 +6,6 @@ permalink: /guide/
 
 # Rosalind HPC Server — User Guide
 
-**Audience:** New lab members  
-**Tone:** Professional, practical, collaborative
-
 ---
 
 ## Table of Contents
