@@ -162,7 +162,7 @@ You should see:
 
 - `R version 4.5.x`
 - `.libPaths()` listing **only** paths inside your environment, for example
-  `/home/<username>/miniforge3/envs/r_test_env/lib/R/library`
+  `.../miniforge3/envs/r_test_env/lib/R/library`
 - `OK` at the end
 
 The messages about functions being masked (for example `dplyr::filter()` masks
@@ -221,7 +221,8 @@ Notes:
   submitted from, which may be `zsh`, and `zsh` syntax can break a bash job
   script.
 - To run your own script, replace the last line with
-  `Rscript /path/to/your_script.R`.
+  `Rscript /Polaris/<LabName>/<project>/your_script.R`. Keep input data and
+  results in your lab's `/Polaris/<LabName>/` storage rather than your home.
 - If the job fails with an `unbound variable` error during activation, remove
   `u` from `set -eo pipefail` (as written above it is already left out).
 
@@ -345,13 +346,21 @@ jupyter kernelspec remove r45
 
 ## Tips
 
-- **Disk quota:** environments are large. If your home directory is tight, move
-  the package cache and environments to project storage:
+- **Storage:** environments and package caches are large, and the home pool is
+  shared by everyone (see [Shared Storage](../guide/#shared-storage) in the HPC
+  Server User Guide). Keep conda environments in your home by default, and keep
+  datasets and results in your lab's storage under `/Polaris/<LabName>/`, not
+  in your home. If your home is tight, move conda's package cache and
+  environments to your lab storage (check with your lab first):
 
   ```bash
-  conda config --add pkgs_dirs /path/to/storage/$USER/conda_pkgs
-  conda config --add envs_dirs /path/to/storage/$USER/conda_envs
+  conda config --add pkgs_dirs /Polaris/<LabName>/<username>/conda_pkgs
+  conda config --add envs_dirs /Polaris/<LabName>/<username>/conda_envs
   ```
+
+- **Many small files:** `/home`, `/Polaris` and `/mnt` are network storage. If an
+  R job reads or writes huge numbers of small files, work in `/tmp` on the
+  compute node and copy the results back at the end of the job.
 
 - **Python and R together** (for example `rpy2`): put both in the same
   environment and install them in a single `conda create` command.
