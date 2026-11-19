@@ -1,6 +1,6 @@
 # rosalind_guide
 
-Practical guides for using the Rosalind HPC cluster in the Sarkar Lab and Lau lab.
+Practical guides for using the Rosalind HPC cluster in the Sarkar Lab, Lau lab, and Zhou lab.
 
 ## Guides
 
